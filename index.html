@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Literally Just Some Fucking Text Fields</title>
+    <style>
+        :root {
+            --bg: #ffffff;
+            --sidebar-bg: #f2f2f2;
+            --text: #000000;
+            --border: #000000;
+            --accent: #e0e0e0;
+            --font-mono: 'Courier New', Courier, monospace;
+        }
+
+        [data-theme="dark"] {
+            --bg: #121212;
+            --sidebar-bg: #1e1e1e;
+            --text: #ffffff;
+            --border: #333333;
+            --accent: #2a2a2a;
+        }
+
+        * {
+            box-sizing: border-box;
+            border-radius: 0 !important;
+            -webkit-appearance: none;                                 
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: var(--font-mono);
+            background-color: var(--bg);
+            color: var(--text);
+            overflow: hidden;
+        }
+
+        #app {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+            position: relative;
+        }
+
+        #sidebar {
+            width: 260px;
+            background-color: var(--sidebar-bg);
+            border-right: 2px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            z-index: 10;
+            transition: transform 0.2s steps(4);                                                 
+        }
+
+        .controls {
+            padding: 10px;
+            border-bottom: 2px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .app-title {
+            font-size: 0.7rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            opacity: 0.6;
+        }
+
+        button, select, input, textarea {
+            font-family: inherit;
+            background: var(--bg);
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 8px;
+            font-size: 14px;
+        }
+
+        button:active {
+            background: var(--text);
+            color: var(--bg);
+        }
+
+        #note-list {
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+
+        .note-item {
+            padding: 12px 10px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .note-item.active {
+            background-color: var(--accent);
+            text-decoration: underline;
+        }
+
+        .del-btn {
+            border: none;
+            padding: 0 5px;
+            background: transparent;
+            font-weight: bold;
+        }
+
+        #editor {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .top-bar {
+            display: flex;
+            align-items: center;
+            border-bottom: 2px solid var(--border);
+        }
+
+        #menu-toggle {
+            display: none;                     
+            padding: 15px;
+            border: none;
+            border-right: 2px solid var(--border);
+            background: var(--accent);
+            font-weight: bold;
+        }
+
+        #note-title {
+            flex-grow: 1;
+            border: none;
+            padding: 15px;
+            font-weight: bold;
+            font-size: 1.1rem;
+            outline: none;
+        }
+
+        #note-content {
+            flex-grow: 1;
+            border: none;
+            padding: 15px;
+            resize: none;
+            outline: none;
+            line-height: 1.6;
+            font-size: 16px;                                
+        }
+
+        @media (max-width: 768px) {
+            #menu-toggle {
+                display: block;
+            }
+
+            #sidebar {
+                position: absolute;
+                left: 0;
+                top: 0;
+                bottom: 0;
+                transform: translateX(-100%);
+                width: 80%;
+                max-width: 300px;
+                box-shadow: 5px 0 0 var(--border);
+            }
+
+            #sidebar.open {
+                transform: translateX(0);
+            }
+
+            #sidebar-overlay {
+                display: none;
+                position: absolute;
+                inset: 0;
+                background: rgba(0,0,0,0.5);
+                z-index: 5;
+            }
+
+            #sidebar-overlay.visible {
+                display: block;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div id="sidebar-overlay" onclick="toggleMenu()"></div>
+
+<div id="app">
+    <aside id="sidebar">
+        <div class="controls">
+            <div class="app-title">Literally Just Some Fucking Text Fields</div>
+            <button onclick="createNewNote()">+ NEW FILE</button>
+            <button onclick="exportNote()">EXPORT .TXT</button>
+            <select id="font-select" onchange="changeFont(this.value)">
+                <option value="'Courier New', monospace">Courier New</option>
+                <option value="'Lucida Console', monospace">Lucida Console</option>
+                <option value="monospace">System Mono</option>
+            </select>
+            <button onclick="toggleTheme()">TOGGLE THEME</button>
+            <button id="close-mobile-menu" onclick="toggleMenu()" style="display: none;">CLOSE MENU</button>
+        </div>
+        <div id="note-list"></div>
+    </aside>
+
+    <main id="editor">
+        <div class="top-bar">
+            <button id="menu-toggle" onclick="toggleMenu()">MENU</button>
+            <input type="text" id="note-title" placeholder="Filename..." oninput="updateNote()">
+        </div>
+        <textarea id="note-content" placeholder="Writing goes here..." oninput="updateNote()"></textarea>
+    </main>
+</div>
+
+<script>
+    let notes = JSON.parse(localStorage.getItem('ljstf_notes')) || [];
+    let currentNoteId = localStorage.getItem('ljstf_id') || null;
+
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    const noteList = document.getElementById('note-list');
+    const titleInput = document.getElementById('note-title');
+    const contentInput = document.getElementById('note-content');
+
+    function init() {
+        if (notes.length === 0) {
+            createNewNote();
+        } else {
+            renderList();
+            loadNote(currentNoteId || notes[0].id);
+        }
+
+        const theme = localStorage.getItem('ljstf_theme') || 'light';
+        document.documentElement.setAttribute('data-theme', theme);
+        
+        const font = localStorage.getItem('ljstf_font') || "'Courier New', monospace";
+        document.getElementById('font-select').value = font;
+        changeFont(font);
+
+        if(window.innerWidth <= 768) document.getElementById('close-mobile-menu').style.display = 'block';
+    }
+
+    function createNewNote() {
+        const id = Date.now().toString();
+        notes.unshift({ id, title: "untitled.txt", content: "" });
+        save();
+        renderList();
+        loadNote(id);
+        if(window.innerWidth <= 768) toggleMenu();
+    }
+
+    function loadNote(id) {
+        currentNoteId = id;
+        localStorage.setItem('ljstf_id', id);
+        const note = notes.find(n => n.id === id);
+        if (note) {
+            titleInput.value = note.title;
+            contentInput.value = note.content;
+        }
+        renderList();
+    }
+
+    function updateNote() {
+        const note = notes.find(n => n.id === currentNoteId);
+        if (note) {
+            note.title = titleInput.value || "untitled.txt";
+            note.content = contentInput.value;
+            save();
+            renderList();
+        }
+    }
+
+    function deleteNote(e, id) {
+        e.stopPropagation();
+        notes = notes.filter(n => n.id !== id);
+        if (notes.length === 0) {
+            createNewNote();
+        } else {
+            if (currentNoteId === id) loadNote(notes[0].id);
+            save();
+            renderList();
+        }
+    }
+
+    function renderList() {
+        noteList.innerHTML = '';
+        notes.forEach(n => {
+            const el = document.createElement('div');
+            el.className = `note-item ${n.id === currentNoteId ? 'active' : ''}`;
+            el.onclick = () => {
+                loadNote(n.id);
+                if(window.innerWidth <= 768) toggleMenu();
+            };
+            
+            const txt = document.createElement('span');
+            txt.textContent = n.title;
+            txt.style.overflow = "hidden";
+            txt.style.textOverflow = "ellipsis";
+            
+            const btn = document.createElement('button');
+            btn.className = 'del-btn';
+            btn.innerHTML = '[X]';
+            btn.onclick = (e) => deleteNote(e, n.id);
+
+            el.append(txt, btn);
+            noteList.appendChild(el);
+        });
+    }
+
+    function toggleMenu() {
+        sidebar.classList.toggle('open');
+        overlay.classList.toggle('visible');
+    }
+
+    function toggleTheme() {
+        const current = document.documentElement.getAttribute('data-theme');
+        const next = current === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('ljstf_theme', next);
+    }
+
+    function changeFont(f) {
+        document.body.style.fontFamily = f;
+        contentInput.style.fontFamily = f;
+        localStorage.setItem('ljstf_font', f);
+    }
+
+    function save() {
+        localStorage.setItem('ljstf_notes', JSON.stringify(notes));
+    }
+
+    function exportNote() {
+        const note = notes.find(n => n.id === currentNoteId);
+        if (!note) return;
+
+        const blob = new Blob([note.content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        
+        let filename = note.title.trim() || "untitled";
+        if (!filename.toLowerCase().endsWith('.txt')) {
+            filename += ".txt";
+        }
+
+        link.href = url;
+        link.download = filename;
+        link.click();
+
+        URL.revokeObjectURL(url);
+    }
+
+    init();
+</script>
+
+</body>
+</html>
